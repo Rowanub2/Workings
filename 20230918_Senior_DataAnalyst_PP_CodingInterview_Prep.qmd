@@ -1,0 +1,540 @@
+---
+title: "Interview_Questions"
+author: "Rowan Mahoney"
+format: html
+editor: visual
+---
+
+# Senior Data Analyst
+
+## PP Coding Interview Questions
+
+### **Question 1: Data Wrangling**
+
+**Problem:**\
+You are given a dataset that contains daily timesheet entries for employees. Each entry includes an **`employee_id`**, **`date`**, **`start_time`**, and **`end_time`**. Can you identify any gaps in the timesheet entries? More specifically, find all **`employee_id`**s that have missing entries for any dates within the range of the dataset.
+
+**Dataset:**
+
+```{r}
+library(tidyverse)
+
+# Sample data
+timesheet <- tibble(
+  employee_id = c(1, 1, 1, 2, 2, 3, 3, 3),
+  date = as.Date(c("2023-01-01", "2023-01-02", "2023-01-04", "2023-01-01", "2023-01-03", "2023-01-02", "2023-01-03", "2023-01-04")),
+  start_time = c("09:00", "09:30", "09:00", "09:00", "09:00", "09:00", "09:00", "09:00"),
+  end_time = c("17:00", "17:30", "17:00", "17:00", "17:00", "17:00", "17:00", "17:00")
+)
+```
+
+#### Solution:
+
+```{r}
+timesheet %>% 
+  complete(employee_id, date=seq(min(date),max(date),by="1 day")) %>% 
+  filter(is.na(start_time))
+```
+
+```{r}
+missing_entries <- timesheet %>% 
+  complete(employee_id, date = seq(min(date), max(date), by="1 day")) %>%
+  filter(is.na(start_time))
+
+print(missing_entries)
+```
+
+### **Question 2: Data Modeling & Calculation**
+
+**Problem:**\
+Given a dataset containing hourly wages and hours worked for each employee on different days, calculate the total pay for each employee, taking into consideration that overtime (any hours worked beyond 8 in a day) should be paid at 1.5x the normal rate.
+
+**Solution:**
+
+```{r}
+# Sample data
+wages <- tibble(
+  employee_id = c(1, 1, 2, 3),
+  date = as.Date(c("2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03")),
+  hourly_wage = c(10, 10, 12, 15),
+  hours_worked = c(9, 8, 10, 7)
+)
+
+total_pay <- wages %>% 
+  mutate(overtime_hours = pmax(0,hours_worked - 8),
+         regular_hours = hours_worked - overtime_hours,
+         overtime_wage = 1.5*hourly_wage,
+         total_pay = regular_hours * hourly_wage + overtime_hours * overtime_wage)
+
+total_pay <- wages %>% 
+  mutate(overtime=pmax(0, hours_worked - 8))
+
+total_pay <- wages %>%
+  mutate(overtime_hours = pmax(0, hours_worked - 8),
+         regular_hours = hours_worked - overtime_hours,
+         pay = regular_hours * hourly_wage + overtime_hours * hourly_wage * 1.5) %>%
+  group_by(employee_id) %>%
+  summarize(total_pay = sum(pay))
+
+total_pay
+```
+
+### **Question 3: Visualization**
+
+**Problem:**\
+Visualize the distribution of hours worked per day for all employees using ggplot.
+
+**Solution:**
+
+```{r}
+library(ggplot2)
+
+ggplot(wages, aes(x = hours_worked)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Hours Worked per Day", x = "Hours Worked", y = "Count")
+```
+
+### **Question 4: Advanced Data Wrangling**
+
+**Problem:**\
+Assuming the **`timesheet`** dataset also contains a column **`break_duration`** (in minutes) that represents the duration of breaks taken by employees, adjust the end times of the timesheet entries by adding the break durations to them.
+
+**Solution:**
+
+```{r}
+# Adding a break_duration column to sample data
+timesheet$break_duration <- c(30, 15, 45, 0, 15, 30, 30, 15)
+
+adjusted_timesheet <- timesheet %>% 
+  mutate(end_timeAdjstd = hms(end_time) + hours(break_duration))
+
+adjusted_timesheet <- timesheet %>%
+  mutate(end_time = as.POSIXct(strptime(end_time, format="%H:%M")) + minutes(break_duration),
+         end_time = format(end_time, format="%H:%M"))
+
+adjusted_timesheet
+```
+
+### **Question 5: Advanced Data Wrangling & Filtering**
+
+**Problem:**\
+From the **`timesheet`** dataset, extract all entries where the employee worked more than 10 hours in a day (excluding break durations).
+
+**Solution:**
+
+```{r}
+long_hours <- timesheet %>%
+  mutate(total_hours = as.numeric(difftime(as.POSIXct(end_time, format="%H:%M"), 
+                                           as.POSIXct(start_time, format="%H:%M"), 
+                                           units = "hours")) - break_duration/60) %>%
+  filter(total_hours > 10)
+
+long_hours
+```
+
+### **Question 6: Data Modeling & Calculation**
+
+**Problem:**\
+Given a dataset that contains the base pay for each employee and a separate dataset that contains sales commission rates for different employees, calculate the total salary for each employee (base pay + commission). Assume commission is a percentage of sales.
+
+**Solution:**
+
+```{r}
+# Sample data
+base_pay <- tibble(
+  employee_id = c(1, 2, 3),
+  base_salary = c(50000, 60000, 55000)
+)
+
+commission_rates <- tibble(
+  employee_id = c(1, 2, 3),
+  commission_percentage = c(0.1, 0.08, 0.09)
+)
+
+sales <- tibble(
+  employee_id = c(1, 2, 3),
+  total_sales = c(100000, 150000, 120000)
+)
+
+total_salary <- base_pay %>%
+  left_join(commission_rates, by = "employee_id") %>%
+  left_join(sales, by = "employee_id") %>%
+  mutate(total = base_salary + commission_percentage * total_sales)
+
+total_salary
+```
+
+### **Question 7: Visualization**
+
+**Problem:**\
+Using ggplot, visualize the total hours worked per week by each employee. Assume each entry in the **`timesheet`** dataset represents a single day's work.
+
+**Solution:**
+
+```{r}
+weekly_hours <- timesheet %>%
+  mutate(week = format(date, "%Y-%U"),
+         total_hours = as.numeric(difftime(as.POSIXct(end_time, format="%H:%M"), 
+                                           as.POSIXct(start_time, format="%H:%M"), 
+                                           units = "hours")) - break_duration/60) %>%
+  group_by(employee_id, week) %>%
+  summarize(weekly_hours = sum(total_hours))
+
+ggplot(weekly_hours, aes(x = week, y = weekly_hours, color = as.factor(employee_id))) +
+  geom_line() +
+  labs(title = "Weekly Hours Worked by Employee", x = "Week", y = "Hours Worked")
+```
+
+### **Question 8: Writing Data Modelling & Calculation Code**
+
+**Problem:**\
+Some employees are entitled to a weekend premium, where they earn an additional 25% of their hourly rate for any hours worked on weekends. Using the **`wages`** dataset, calculate the additional pay each employee should receive for weekend work. Assume that the dataset contains a column **`day_of_week`** that labels the day of the week for each entry.
+
+**Solution:**
+
+```{r}
+# Adding a day_of_week column to sample data
+wages$day_of_week <- weekdays(wages$date)
+
+weekend_premium <- wages %>%
+  filter(day_of_week %in% c("Saturday", "Sunday")) %>%
+  mutate(extra_pay = hourly_wage * hours_worked * 0.25) %>%
+  group_by(employee_id) %>%
+  summarize(total_extra_pay = sum(extra_pay))
+
+weekend_premium
+```
+
+### **Question 9: Data Wrangling - Join Operations**
+
+**Problem:**\
+You have two datasets. One dataset, **`employee_details`**, has columns **`employee_id`**, **`name`**, and **`position`**. Another dataset, **`employee_sales`**, has columns **`employee_id`**, **`month`**, and **`sales_amount`**. Merge these two datasets to get a combined dataset that includes the employee name and position alongside their monthly sales.
+
+**Solution:**
+
+```{r}
+# Sample data
+employee_details <- tibble(
+  employee_id = c(1, 2, 3),
+  name = c("Alice", "Bob", "Charlie"),
+  position = c("Manager", "Salesperson", "Associate")
+)
+
+employee_sales <- tibble(
+  employee_id = c(1, 2, 3, 1, 2),
+  month = c("January", "January", "January", "February", "February"),
+  sales_amount = c(5000, 6000, 5500, 4900, 6100)
+)
+
+combined_data <- employee_sales %>%
+  left_join(employee_details, by = "employee_id")
+
+combined_data
+```
+
+### **Question 10: Data Modeling - Conditional Calculation**
+
+**Problem:**\
+Using the **`wages`** dataset, calculate the total pay for each employee. If an employee works on a "Sunday", they get double their normal hourly rate for those hours.
+
+**Solution:**
+
+```{r}
+# Adding a day_of_week column to sample data
+wages$day_of_week <- weekdays(wages$date)
+
+total_pay_with_sunday_premium <- wages %>%
+  mutate(hourly_rate = ifelse(day_of_week == "Sunday", 2 * hourly_wage, hourly_wage),
+         pay = hourly_rate * hours_worked) %>%
+  group_by(employee_id) %>%
+  summarize(total_pay = sum(pay))
+
+total_pay_with_sunday_premium
+```
+
+### **Question 11: Visualization - Comparative Plot**
+
+**Problem:**\
+Visualize the average sales for each month using ggplot. The visualization should easily allow comparison of monthly sales averages.
+
+**Solution:**
+
+```{r}
+average_sales <- employee_sales %>%
+  group_by(month) %>%
+  summarize(average_sales = mean(sales_amount))
+
+ggplot(average_sales, aes(x = month, y = average_sales)) +
+  geom_bar(stat="identity", fill = "coral") +
+  labs(title = "Average Sales by Month", x = "Month", y = "Average Sales")
+```
+
+### **Question 12: Advanced Data Wrangling - String Manipulation**
+
+**Problem:**\
+The **`employee_details`** dataset has a new column **`email`** with the format "\[name\]\@company.com". Extract just the name portion from the email address for each employee.
+
+**Solution:**
+
+```{r}
+# Adding an email column to sample data
+employee_details$email <- c("alice@company.com", "bob@company.com", "charlie@company.com")
+
+employee_names <- employee_details %>%
+  mutate(extracted_name = str_extract(email, "^(.*?)@"))
+
+employee_names
+```
+
+### **Dataset: `retail_sales`**
+
+Columns:
+
+-   **`transaction_id`**: Unique ID for each transaction.
+
+-   **`product`**: Name of the product sold.
+
+-   **`quantity`**: Number of products sold in the transaction.
+
+-   **`price_each`**: Price of a single unit of the product.
+
+-   **`sale_date`**: Date of the transaction.
+
+Sample:
+
+```{r}
+retail_sales <- tibble(
+  transaction_id = 1:6,
+  product = c("Shirt", "Pants", "Hat", "Shirt", "Hat", "Shoes"),
+  quantity = c(2, 1, 3, 1, 2, 1),
+  price_each = c(20, 50, 10, 20, 10, 60),
+  sale_date = as.Date(c("2023-01-10", "2023-01-11", "2023-01-11", "2023-01-12", "2023-01-12", "2023-01-13"))
+)
+```
+
+### **Question 1: Data Wrangling - Aggregation**
+
+**Problem:**\
+Calculate the total revenue for each product sold.
+
+**Solution:**
+
+```{r}
+product_revenue <- retail_sales %>%
+  group_by(product) %>%
+  summarize(total_revenue = sum(quantity * price_each))
+
+product_revenue
+```
+
+### **Question 2: Data Modeling - Conditional Calculation**
+
+**Problem:**\
+Give a 10% discount on all transactions where more than 2 items (regardless of the product) are sold. Calculate the total price for each transaction after applying this discount.
+
+**Solution:**
+
+```{r}
+transaction_discount <- retail_sales %>%
+  mutate(total_price = quantity * price_each,
+         discount = ifelse(quantity > 2, 0.1, 0),
+         discounted_price = total_price * (1 - discount))
+
+transaction_discount
+```
+
+### **Question 3: Visualization - Time Series Plot**
+
+**Problem:**\
+Visualize the daily total revenue using ggplot.
+
+**Solution:**
+
+```{r}
+daily_revenue <- retail_sales %>%
+  group_by(sale_date) %>%
+  summarize(total_revenue = sum(quantity * price_each))
+
+ggplot(daily_revenue, aes(x = sale_date, y = total_revenue)) +
+  geom_line(color = "blue") +
+  labs(title = "Daily Total Revenue", x = "Date", y = "Revenue")
+```
+
+### **Question 4: Advanced Data Wrangling - Pivot & Summarize**
+
+**Problem:**\
+Create a summary table that shows the total quantity sold for each product by date. If no sales occurred for a product on a given date, it should show 0.
+
+**Solution:**
+
+```{r}
+product_summary <- retail_sales %>%
+  group_by(sale_date, product) %>%
+  summarize(total_quantity = sum(quantity)) %>%
+  spread(key = product, value = total_quantity, fill = 0)
+
+product_summary
+```
+
+### **Dataset: `employee_payroll`**
+
+Columns:
+
+-   **`employee_id`**: Unique ID for each employee.
+
+-   **`timesheet_date`**: Date of the timesheet entry.
+
+-   **`hours_worked`**: Number of hours worked on that day.
+
+-   **`hourly_rate`**: Hourly rate for the employee on that day.
+
+-   **`award`**: Name of the award or enterprise agreement that dictates the pay rate.
+
+Sample:
+
+```{r}
+employee_payroll <- tibble(
+  employee_id = c(101, 102, 103, 101, 102),
+  timesheet_date = as.Date(c("2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-02")),
+  hours_worked = c(8, 7.5, 9, 8.5, 7),
+  hourly_rate = c(25, 28, 30, 25, 28),
+  award = c("Standard", "Standard", "Overtime", "Overtime", "Standard")
+)
+```
+
+### **Question 1: Data Wrangling - Filter & Summarize**
+
+**Problem:**\
+Filter the **`employee_payroll`** data for timesheet entries on **`2023-01-02`**, and compute the total payroll cost for that day.
+
+**Solution:**
+
+```{r}
+cost_2023_01_02 <- employee_payroll %>%
+  filter(timesheet_date == as.Date("2023-01-02")) %>%
+  summarize(total_cost = sum(hours_worked * hourly_rate))
+
+cost_2023_01_02
+```
+
+### **Question 2: Data Modeling - Conditional Calculation**
+
+**Problem:**\
+Add a new column **`adjusted_pay`** to the dataset. If the **`award`** is "Overtime", employees should be paid 1.5 times their **`hourly_rate`** for the **`hours_worked`**.
+
+**Solution:**
+
+```{r}
+employee_payroll_adjusted <- employee_payroll %>%
+  mutate(adjusted_pay = ifelse(award == "Overtime", 1.5 * hourly_rate, hourly_rate) * hours_worked)
+
+employee_payroll_adjusted
+```
+
+### **Question 3: Visualization - Comparative Plot**
+
+**Problem:**\
+Create a bar chart comparing the total hours worked by each employee across all days using ggplot.
+
+**Solution:**
+
+```{r}
+hours_by_employee <- employee_payroll %>%
+  group_by(employee_id) %>%
+  summarize(total_hours = sum(hours_worked))
+
+ggplot(hours_by_employee, aes(x = as.factor(employee_id), y = total_hours)) +
+  geom_bar(stat="identity", fill = "skyblue") +
+  labs(title = "Total Hours Worked by Employee", x = "Employee ID", y = "Total Hours")
+```
+
+### **Question 4: Advanced Data Wrangling - Data Ingestion**
+
+**Problem:**\
+Assume that the employee details are stored in a SQL database. Write code to extract data for employee with **`employee_id`** 101 using **`DBI`** and **`dbplyr`**.
+
+**Solution:**
+
+```{r}
+# Assuming you've already established a connection named con to the database
+
+employee_data <- tbl(con, "employee_table") %>% 
+  filter(employee_id == 101) %>% 
+  collect()
+
+employee_data
+```
+
+### **Question 5: Data Wrangling - Join Operation**
+
+**Problem:**\
+Assume you have another dataset **`employee_details`**:
+
+```{r}
+employee_details <- tibble(
+  employee_id = c(101, 102, 103),
+  employee_name = c("Alice", "Bob", "Charlie"),
+  designation = c("Analyst", "Manager", "Executive")
+)
+```
+
+Join the **`employee_details`** with the **`employee_payroll`** dataset to add the **`employee_name`** and **`designation`** columns.
+
+**Solution:**
+
+```{r}
+combined_data <- employee_payroll %>%
+  left_join(employee_details, by = "employee_id")
+
+combined_data
+```
+
+### **Question 6: Data Modeling - Advanced Conditional Calculation**
+
+**Problem:**\
+Calculate the total pay for each employee. If the **`designation`** is "Executive" and the award is "Standard", add a 10% bonus to the pay for those specific entries.
+
+**Solution:**
+
+```{r}
+total_pay <- combined_data %>%
+  mutate(bonus_pay = ifelse(designation == "Executive" & award == "Standard", 1.1, 1) * hourly_rate * hours_worked) %>%
+  group_by(employee_id, employee_name) %>%
+  summarize(total_pay = sum(bonus_pay))
+
+total_pay
+```
+
+### **Question 7: Visualization - Time Series**
+
+**Problem:**\
+Plot the total pay by **`timesheet_date`** across all employees.
+
+**Solution:**
+
+```{r}
+pay_by_date <- combined_data %>%
+  mutate(pay = hourly_rate * hours_worked) %>%
+  group_by(timesheet_date) %>%
+  summarize(total_pay = sum(pay))
+
+ggplot(pay_by_date, aes(x = timesheet_date, y = total_pay)) +
+  geom_line(color = "red") +
+  labs(title = "Total Pay by Date", x = "Date", y = "Total Pay")
+```
+
+### **Question 8: Advanced Data Wrangling - Gap Identification**
+
+**Problem:**\
+Identify any dates between **`2023-01-01`** and **`2023-01-05`** where there were no timesheet entries.
+
+**Solution:**
+
+```{r}
+all_dates <- tibble(timesheet_date = seq(as.Date("2023-01-01"), as.Date("2023-01-05"), by="day"))
+
+missing_dates <- all_dates %>%
+  anti_join(employee_payroll, by = "timesheet_date")
+
+missing_dates
+```
